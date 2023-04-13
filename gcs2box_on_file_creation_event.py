@@ -23,12 +23,12 @@ def gcs2box_on_file_creation_event(event, context):
          event (dict): Event payload.
          context (google.cloud.functions.Context): Metadata for the event.
     """
-    file = event
-    print(f"Processing file: {file['name']}.")
+    file_name = event['name']
+    print(f"Processing file: {file_name}.")
 
     
     ### Get Secrets
-    # Documentation: https://github.com/box/box-python-sdk/blob/main/docs/usage/files.md#upload-a-file
+    # Documentation: https://cloud.google.com/secret-manager/docs/reference/libraries#client-libraries-usage-python
     # Import the Secret Manager client library.
     from google.cloud import secretmanager
 
@@ -68,6 +68,7 @@ def gcs2box_on_file_creation_event(event, context):
     payload = response.payload.data.decode("UTF-8")
     # print("Plaintext: {}".format(payload))
 
+    #TODO Parse response to set attributes for JWTAuth. Jake needs IAM permissions for this
 
 
     ### Authenticate to Box.com using JWT
@@ -91,7 +92,7 @@ def gcs2box_on_file_creation_event(event, context):
 
     ### Move file to Box
     # Documentation: https://github.com/box/box-python-sdk/blob/main/docs/usage/files.md#upload-a-file
-    folder_id = '22222' # Replace with your folder_id
+    folder_id = '198972272346' # Replace with your folder_id
     # new_file = client.folder(folder_id).upload('/home/me/document.pdf')
-    new_file = client.folder(folder_id).upload(file)
+    new_file = client.folder(folder_id).upload(file_name)
     print(f'File "{new_file.name}" uploaded to Box with file ID {new_file.id}')
