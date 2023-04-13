@@ -8,12 +8,20 @@ managed by GCP Secret Manager.
 
 Pipleline Details:
 
-GCP Project:          nih-nci-dceg-connect-dev
-GCP CS Bucket:        analyticsReport2box
-GCP Cloud Function:   test_analytics_team_bucket
-GCP Secret:           Jake still needs Secret Manager Permissions
-Box Folder:           CONNECT_DCEG ONLY > GCP2BOX_test
-Box Folder ID:        198972272346
-Box Folder Link:      https://nih.app.box.com/folder/198972272346                 
-Box App:              NCI_BOX_GCP_CONNECT4CANCER_DEV
-Box App Link:         https://nih.app.box.com/developers/console/app/1960499
+- GCP Project:          nih-nci-dceg-connect-dev
+
+- GCP CS Bucket:        analyticsReport2box
+
+- GCP Cloud Function:   test_analytics_team_bucket
+
+- GCP Secret:           Jake still needs Secret Manager Permissions
+
+- Box Folder:           CONNECT_DCEG ONLY > GCP2BOX_test
+
+- Box Folder ID:        198972272346
+
+- Box Folder Link:      https://nih.app.box.com/folder/198972272346          
+
+- Box App:              NCI_BOX_GCP_CONNECT4CANCER_DEV
+
+- Box App Link:         https://nih.app.box.com/developers/console/app/1960499
