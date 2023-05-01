@@ -1,21 +1,21 @@
-"""
-This function will run as a GCP Function to push any file 
-dropped in a GCP Cloud Storage Bucket to a folder on Box.com using
-a token associated with Custom Box.com app. The token is will be 
-managed by GCP Secret Manager.
+'''
+Written by:    Daniel Russ, Jake Peters
+Written:       Apr 2022
+Last Modified: May 2022
+Description:   This cloud function uses a Custom box app service account
+               to move a file to a specified Box folder when the file has 
+               been put into a specified Cloud Storage bucket.
+               The Box folder admin must invite the Box app service account
+               as a user for the folder. 
+'''
 
-Pipleline Details:
+from google.cloud import secretmanager, storage
+from boxsdk import JWTAuth, Client
+import json
+import io
 
-GCP Project:          nih-nci-dceg-connect-dev
-GCP CS Bucket:        analyticsReport2box
-GCP Cloud Function:   test_analytics_team_bucket
-GCP Secret:           Jake still needs Secret Manager Permissions
-Box Folder:           CONNECT_DCEG ONLY > GCP2BOX_test
-Box Folder ID:        198972272346
-Box Folder Link:      https://nih.app.box.com/folder/198972272346                 
-Box App:              NCI_BOX_GCP_CONNECT4CANCER_DEV
-Box App Link:         https://nih.app.box.com/developers/console/app/1960499
-"""
+# Change this one parameter to use a different box folder.
+BOX_FOLDER_ID = "205507496270"
 
 def gcs2box_on_file_creation_event(event, context):
     """Triggered by a change to a Cloud Storage bucket.
@@ -23,76 +23,76 @@ def gcs2box_on_file_creation_event(event, context):
          event (dict): Event payload.
          context (google.cloud.functions.Context): Metadata for the event.
     """
-    file_name = event['name']
-    print(f"Processing file: {file_name}.")
+    fileObject = event
+    # print(f"File object: {fileObject}")
+    # print(f"Processing file: {fileObject['name']}.")
 
+    ## get the contents of the newly created file on GCP...
+    storageClient = storage.Client()
+    bucket  = storageClient.bucket(fileObject['bucket'])
+    blob = bucket.blob(fileObject['name'])
+    contents = blob.download_as_bytes()
+
+    ## get the service account from Box and create a client...
+    boxToken = json.loads( get_box_token() )
+    boxClient = get_box_client(boxToken)
+
+    ## Move file to Box
+    # Documentation: https://github.com/box/box-python-sdk/blob/main/docs/usage/files.md#upload-a-file
+    # NOTE: box requires either a Stream or a file.  Since we do not have
+    #       files on GCS, convert the byte-array (contents) into a stream
+    #       and upload it to box.    
+    stream = io.BytesIO(contents)
+    # Check for "_export2box_" tag in filename before exporting
+    if fileToBeExported(fileObject['name']):
+        new_file = boxClient.folder(BOX_FOLDER_ID).upload_stream(stream, fileObject['name'])
+
+def fileToBeExported(file_name):
+    '''Check for "_export2box_" to prevent accidental exports of files dropped in this bucket.'''
+    if "_export2box_" in file_name:
+        return True
+    else:
+        return False
+
+def stoken_callback(token, arg2):
+  '''This function is used as a callback by the in Box's JWTAuth object. 
+  It takes a token as an argument and returns it, so it basically does 
+  nothing, but it is required.'''
+  return token
+
+def get_box_token(version_id="latest"):
+    '''Get Secrets
+    Documentation: https://github.com/box/box-python-sdk/blob/main/docs/usage/files.md#upload-a-file
+    '''
+
+    secret_id = "boxtoken" # This is the name of the Cloud Secret set up for this purpose by Daniel Russ
+    PROJECT_ID = 1061430463455 # This is the project_id for the `nih-nci-dceg-connect-dev` environment
     
-    ### Get Secrets
-    # Documentation: https://cloud.google.com/secret-manager/docs/reference/libraries#client-libraries-usage-python
-    # Import the Secret Manager client library.
-    from google.cloud import secretmanager
-
-    # GCP project in which to store secrets in Secret Manager.
-    project_id = "nih-nci-dceg-connect-dev"
-
-    # ID of the secret to create.
-    secret_id = "YOUR_SECRET_ID"
-
     # Create the Secret Manager client.
     client = secretmanager.SecretManagerServiceClient()
 
-    # Build the parent name from the project.
-    parent = f"projects/{project_id}"
-
-    # Create the parent secret.
-    secret = client.create_secret(
-        request={
-            "parent": parent,
-            "secret_id": secret_id,
-            "secret": {"replication": {"automatic": {}}},
-          }
-    )
-
-    # Add the secret version.
-    version = client.add_secret_version(
-        request={"parent": secret.name, "payload": {"data": b"hello world!"}}
-    )
+    # Build the resource name of the secret version.
+    name = f"projects/{PROJECT_ID}/secrets/{secret_id}/versions/{version_id}"
 
     # Access the secret version.
-    response = client.access_secret_version(request={"name": version.name})
+    response = client.access_secret_version(name=name)
 
-    # Print the secret payload.
-    #
-    # WARNING: Do not print the secret in a production environment - this
-    # snippet is showing how to access the secret material.
-    payload = response.payload.data.decode("UTF-8")
-    # print("Plaintext: {}".format(payload))
+    # Return the decoded payload.
+    return response.payload.data.decode('UTF-8')
 
-    #TODO Parse response to set attributes for JWTAuth. Jake needs IAM permissions for this
-
-
-    ### Authenticate to Box.com using JWT
-    # Documentation: https://github.com/box/box-python-sdk/blob/main/docs/usage/authentication.md
-    from boxsdk import JWTAuth, Client
-
-    auth = JWTAuth(
-        client_id='YOUR_CLIENT_ID',
-        client_secret='YOUR_CLIENT_SECRET',
-        enterprise_id='YOUR_ENTERPRISE_ID',
-        jwt_key_id='YOUR_JWT_KEY_ID',
-        rsa_private_key_file_sys_path='CERT.PEM',
-        rsa_private_key_passphrase='PASSPHRASE',
-        store_tokens=your_store_tokens_callback_method, # 
-    )
-
-    access_token = auth.authenticate_instance()
-
-    client = Client(auth)
-    
-
-    ### Move file to Box
-    # Documentation: https://github.com/box/box-python-sdk/blob/main/docs/usage/files.md#upload-a-file
-    folder_id = '198972272346' # Replace with your folder_id
-    # new_file = client.folder(folder_id).upload('/home/me/document.pdf')
-    new_file = client.folder(folder_id).upload(file_name)
-    print(f'File "{new_file.name}" uploaded to Box with file ID {new_file.id}')
+def get_box_client(boxToken):
+    '''Authenticate to Box.com
+    Documentation: https://github.com/box/box-python-sdk/blob/main/docs/usage/authentication.md
+    '''
+    service_account_auth = JWTAuth(
+        client_id = boxToken['boxAppSettings']['clientID'],
+        client_secret = boxToken['boxAppSettings']['clientSecret'],
+        enterprise_id = boxToken['enterpriseID'],
+        jwt_key_id = boxToken['boxAppSettings']['appAuth']['publicKeyID'],
+        rsa_private_key_data = boxToken['boxAppSettings']['appAuth']['privateKey'],
+        rsa_private_key_passphrase = boxToken['boxAppSettings']['appAuth']['passphrase'],
+        store_tokens=stoken_callback)
+    # print(' ==================== THE SERVICE ACCOUNT AUTH IS ', service_account_auth)
+    access_token = service_account_auth.authenticate_instance()
+    service_account_client = Client(service_account_auth)
+    return service_account_client

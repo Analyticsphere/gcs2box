@@ -1,4 +1,5 @@
 # Function dependencies, for example:
 # package>=version
 google-cloud-storage
-boxsdk>=3.7.0
+google-cloud-secret-manager
+boxsdk[jwt]
